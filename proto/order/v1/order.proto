@@ -1,0 +1,179 @@
+syntax = "proto3";
+
+package kfc.order.v1;
+
+option go_package = "github.com/ramisoul84/kfc-order/gen/order/v1;orderv1";
+
+// OrderService owns the order lifecycle for every restaurant.
+// Source of truth: kfc-order Postgres tables orders, order_lines,
+// order_counters.
+//
+// Callers:
+//   kfc-userapi — creates orders (kiosk, web), drives status from KDS,
+//                 reads active orders for KDS and the hall display.
+//   kfc-crm     — lists orders, cancels them, reads dashboard stats.
+//
+// Every mutation is published to Kafka topic "orders.events".
+//
+// Money is always in minor units (kopecks) to avoid float drift.
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (Order);
+  rpc GetOrder(GetOrderRequest) returns (Order);
+  rpc ListActiveOrders(ListActiveOrdersRequest) returns (ListOrdersResponse);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  rpc UpdateOrderStatus(UpdateOrderStatusRequest) returns (Order);
+  rpc GetOrderStats(GetOrderStatsRequest) returns (OrderStats);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Order
+// ─────────────────────────────────────────────────────────────────
+
+message OrderLine {
+  string id             = 1;
+  string item_id        = 2;
+  string product_code   = 3;
+  string name           = 4;
+  string variation_id   = 5; // empty when no variation
+  string variation_name = 6;
+  int32  quantity       = 7;
+  int64  unit_price     = 8; // kopecks
+  int64  line_total     = 9; // kopecks
+}
+
+message Order {
+  string id             = 1;
+  string restaurant_id  = 2;
+  int32  number         = 3;  // daily sequence per restaurant, starts at 1
+  string business_date  = 4;  // YYYY-MM-DD
+  string channel        = 5;  // kiosk | web | pos
+  string order_type     = 6;  // dine_in | takeaway
+  string status         = 7;  // accepted | preparing | ready | completed | cancelled
+  string payment_method = 8;  // card | cash | online
+  string payment_status = 9;  // paid | unpaid
+  string customer_name  = 10;
+  string customer_phone = 11;
+  string note           = 12;
+  string device_id      = 13; // empty for web orders
+  int64  subtotal       = 14; // kopecks
+  int64  total          = 15; // kopecks
+  string currency       = 16;
+  repeated OrderLine lines = 17;
+  string cancel_reason  = 18;
+
+  int64 created_at   = 20; // unix millis
+  int64 updated_at   = 21;
+  int64 preparing_at = 22; // 0 when not reached
+  int64 ready_at     = 23;
+  int64 completed_at = 24;
+  int64 cancelled_at = 25;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Requests
+// ─────────────────────────────────────────────────────────────────
+
+message CreateOrderLine {
+  string item_id        = 1;
+  string product_code   = 2;
+  string name           = 3;
+  string variation_id   = 4;
+  string variation_name = 5;
+  int32  quantity       = 6;
+  int64  unit_price     = 7; // kopecks, already resolved by the caller
+}
+
+message CreateOrderRequest {
+  string restaurant_id   = 1;
+  string channel         = 2;
+  string order_type      = 3;
+  string payment_method  = 4;
+  string payment_status  = 5;
+  string customer_name   = 6;
+  string customer_phone  = 7;
+  string note            = 8;
+  string device_id       = 9;
+  string currency        = 10;
+  repeated CreateOrderLine lines = 11;
+  // Client-generated key. A retry with the same key for the same
+  // restaurant returns the original order instead of creating a new one.
+  string idempotency_key = 12;
+}
+
+message GetOrderRequest {
+  string id = 1;
+}
+
+message ListActiveOrdersRequest {
+  string restaurant_id = 1;
+  // Empty = accepted, preparing, ready.
+  repeated string statuses = 2;
+}
+
+message ListOrdersRequest {
+  // Empty = all restaurants (caller has already enforced scope).
+  repeated string restaurant_ids = 1;
+  string status  = 2;
+  string channel = 3;
+  int64  from    = 4; // unix millis, inclusive; 0 = unbounded
+  int64  to      = 5; // unix millis, exclusive; 0 = unbounded
+  int32  limit   = 6;
+  int32  offset  = 7;
+  int32  number  = 8; // 0 = any
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  int32 total = 2;
+}
+
+message UpdateOrderStatusRequest {
+  string id     = 1;
+  string status = 2;
+  string reason = 3; // required for cancelled
+  // Who did it: "device:<id>" or "user:<id>". Logged, not enforced.
+  string actor  = 4;
+}
+
+message GetOrderStatsRequest {
+  repeated string restaurant_ids = 1;
+  int64 from = 2; // unix millis
+  int64 to   = 3;
+}
+
+message ChannelStat {
+  string channel = 1;
+  int32  orders  = 2;
+  int64  revenue = 3;
+}
+
+message HourStat {
+  int32 hour    = 1; // 0–23, in the service timezone
+  int32 orders  = 2;
+  int64 revenue = 3;
+}
+
+message ItemStat {
+  string item_id  = 1;
+  string name     = 2;
+  int32  quantity = 3;
+  int64  revenue  = 4;
+}
+
+message StatusStat {
+  string status = 1;
+  int32  orders = 2;
+}
+
+message OrderStats {
+  int32  total_orders       = 1; // excludes cancelled
+  int64  revenue            = 2; // kopecks, excludes cancelled
+  int64  average_ticket     = 3; // kopecks
+  int32  avg_prep_seconds   = 4; // created → ready
+  int32  cancelled_orders   = 5;
+  int32  active_orders      = 6;
+  repeated ChannelStat by_channel = 7;
+  repeated HourStat    by_hour    = 8;
+  repeated ItemStat    top_items  = 9;
+  repeated StatusStat  by_status  = 10;
+}

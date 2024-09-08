@@ -20,7 +20,7 @@ type Producer struct {
 // NewProducer creates a Kafka producer pointed at the given brokers.
 func NewProducer(brokers []string, log *logger.Logger) *Producer {
 	w := &kafka.Writer{
-		Addr:                   kafka.TCP(brokers...),
+		Addr: kafka.TCP(brokers...),
 		// Hash on the message key so every event for one restaurant lands
 		// on the same partition and consumers see them in order.
 		Balancer:               &kafka.Hash{},

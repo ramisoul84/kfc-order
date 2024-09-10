@@ -5,10 +5,12 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/order ./cmd/order
+    CGO_ENABLED=0 go build -trimpath -tags timetzdata -ldflags="-s -w" -o /out/order ./cmd/order
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates tzdata wget && adduser -D -u 10001 app
+# Alpine already has CA certificates and busybox wget; time zones are
+# compiled into the binary (-tags timetzdata), so no packages needed.
+RUN adduser -D -u 10001 app
 USER app
 COPY --from=build /out/order /usr/local/bin/order
 ENV APP_ENV=staging

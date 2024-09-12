@@ -47,7 +47,8 @@ const orderColumns = `
 	id, restaurant_id, number, business_date, channel, order_type, status,
 	payment_method, payment_status, customer_name, customer_phone, note,
 	device_id, subtotal, total, currency, cancel_reason, idempotency_key,
-	created_at, updated_at, preparing_at, ready_at, completed_at, cancelled_at`
+	created_at, updated_at, preparing_at, ready_at, completed_at, cancelled_at,
+	member_id, discount, points_redeemed, loyalty_hold_id`
 
 // ═══════════════════════════════════════════════════════════════════
 // CREATE
@@ -78,13 +79,15 @@ func (r *orderRepo) Create(ctx context.Context, o *domain.Order) error {
 		INSERT INTO orders (
 			id, restaurant_id, number, business_date, channel, order_type, status,
 			payment_method, payment_status, customer_name, customer_phone, note,
-			device_id, subtotal, total, currency, idempotency_key
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			device_id, subtotal, total, currency, idempotency_key,
+			member_id, discount, points_redeemed, loyalty_hold_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 		RETURNING created_at, updated_at`,
 		o.ID, o.RestaurantID, o.Number, o.BusinessDate.Format(time.DateOnly),
 		o.Channel, o.OrderType, o.Status, o.PaymentMethod, o.PaymentStatus,
 		o.CustomerName, o.CustomerPhone, o.Note, o.DeviceID,
 		o.Subtotal, o.Total, o.Currency, o.IdempotencyKey,
+		o.MemberID, o.Discount, o.PointsRedeemed, o.LoyaltyHoldID,
 	).Scan(&o.CreatedAt, &o.UpdatedAt)
 	if err != nil {
 		var pqErr *pq.Error
@@ -217,6 +220,9 @@ func buildWhere(f domain.OrderFilter) (string, []any) {
 	}
 	if f.Number > 0 {
 		add("number = $%d", f.Number)
+	}
+	if f.MemberID != nil {
+		add("member_id = $%d", *f.MemberID)
 	}
 	if f.From != nil {
 		add("created_at >= $%d", *f.From)

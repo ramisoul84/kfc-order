@@ -67,6 +67,12 @@ message Order {
   int64 ready_at     = 23;
   int64 completed_at = 24;
   int64 cancelled_at = 25;
+
+  // Loyalty
+  string member_id       = 26; // empty for guests
+  int64  discount        = 27; // kopecks; total = subtotal - discount
+  int32  points_redeemed = 28;
+  string loyalty_hold_id = 29;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -98,6 +104,13 @@ message CreateOrderRequest {
   // Client-generated key. A retry with the same key for the same
   // restaurant returns the original order instead of creating a new one.
   string idempotency_key = 12;
+
+  // Loyalty (optional). The caller has already reserved the points in
+  // kfc-loyalty; discount must not exceed the subtotal.
+  string member_id       = 13;
+  int64  discount        = 14; // kopecks
+  int32  points_redeemed = 15;
+  string loyalty_hold_id = 16;
 }
 
 message GetOrderRequest {
@@ -120,6 +133,7 @@ message ListOrdersRequest {
   int32  limit   = 6;
   int32  offset  = 7;
   int32  number  = 8; // 0 = any
+  string member_id = 9; // empty = any
 }
 
 message ListOrdersResponse {

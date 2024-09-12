@@ -133,6 +133,10 @@ type Order struct {
 	ReadyAt        *time.Time    `db:"ready_at"`
 	CompletedAt    *time.Time    `db:"completed_at"`
 	CancelledAt    *time.Time    `db:"cancelled_at"`
+	MemberID       *uuid.UUID    `db:"member_id"`
+	Discount       int64         `db:"discount"`
+	PointsRedeemed int           `db:"points_redeemed"`
+	LoyaltyHoldID  *uuid.UUID    `db:"loyalty_hold_id"`
 
 	Lines []OrderLine `db:"-"`
 }
@@ -176,6 +180,11 @@ type CreateOrderInput struct {
 	Currency       string
 	IdempotencyKey string
 	Lines          []CreateLineInput
+
+	MemberID       *uuid.UUID
+	Discount       int64 // kopecks
+	PointsRedeemed int
+	LoyaltyHoldID  *uuid.UUID
 }
 
 type CreateLineInput struct {
@@ -194,6 +203,7 @@ type OrderFilter struct {
 	Status        Status
 	Channel       Channel
 	Number        int
+	MemberID      *uuid.UUID
 	From          *time.Time
 	To            *time.Time
 	Limit         int

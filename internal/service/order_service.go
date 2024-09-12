@@ -88,6 +88,9 @@ func (s *orderService) Create(ctx context.Context, in *domain.CreateOrderInput) 
 	if in.IdempotencyKey != "" {
 		order.IdempotencyKey = &in.IdempotencyKey
 	}
+	order.MemberID = in.MemberID
+	order.LoyaltyHoldID = in.LoyaltyHoldID
+	order.PointsRedeemed = in.PointsRedeemed
 
 	for _, l := range in.Lines {
 		lineTotal := l.UnitPrice * int64(l.Quantity)
@@ -104,7 +107,11 @@ func (s *orderService) Create(ctx context.Context, in *domain.CreateOrderInput) 
 		})
 		order.Subtotal += lineTotal
 	}
-	order.Total = order.Subtotal
+	if in.Discount > order.Subtotal {
+		return nil, domain.NewValidationError("discount exceeds the order subtotal")
+	}
+	order.Discount = in.Discount
+	order.Total = order.Subtotal - in.Discount
 
 	if err := s.repo.Create(ctx, order); err != nil {
 		// Lost a race with a concurrent retry carrying the same key.
@@ -155,6 +162,12 @@ func validateCreate(in *domain.CreateOrderInput) error {
 	}
 	if utf8.RuneCountInString(in.Note) > 500 {
 		return domain.NewValidationError("note is too long")
+	}
+	if in.Discount < 0 || in.PointsRedeemed < 0 {
+		return domain.NewValidationError("discount must not be negative")
+	}
+	if in.Discount > 0 && (in.MemberID == nil || in.LoyaltyHoldID == nil) {
+		return domain.NewValidationError("a discount requires a loyalty member and hold")
 	}
 	if len(in.IdempotencyKey) > 100 {
 		return domain.NewValidationError("idempotency_key is too long")

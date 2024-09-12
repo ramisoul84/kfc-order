@@ -155,8 +155,13 @@ type Order struct {
 	ReadyAt       int64                  `protobuf:"varint,23,opt,name=ready_at,json=readyAt,proto3" json:"ready_at,omitempty"`
 	CompletedAt   int64                  `protobuf:"varint,24,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
 	CancelledAt   int64                  `protobuf:"varint,25,opt,name=cancelled_at,json=cancelledAt,proto3" json:"cancelled_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Loyalty
+	MemberId       string `protobuf:"bytes,26,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"` // empty for guests
+	Discount       int64  `protobuf:"varint,27,opt,name=discount,proto3" json:"discount,omitempty"`                // kopecks; total = subtotal - discount
+	PointsRedeemed int32  `protobuf:"varint,28,opt,name=points_redeemed,json=pointsRedeemed,proto3" json:"points_redeemed,omitempty"`
+	LoyaltyHoldId  string `protobuf:"bytes,29,opt,name=loyalty_hold_id,json=loyaltyHoldId,proto3" json:"loyalty_hold_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Order) Reset() {
@@ -357,6 +362,34 @@ func (x *Order) GetCancelledAt() int64 {
 	return 0
 }
 
+func (x *Order) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *Order) GetDiscount() int64 {
+	if x != nil {
+		return x.Discount
+	}
+	return 0
+}
+
+func (x *Order) GetPointsRedeemed() int32 {
+	if x != nil {
+		return x.PointsRedeemed
+	}
+	return 0
+}
+
+func (x *Order) GetLoyaltyHoldId() string {
+	if x != nil {
+		return x.LoyaltyHoldId
+	}
+	return ""
+}
+
 type CreateOrderLine struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
@@ -465,6 +498,12 @@ type CreateOrderRequest struct {
 	// Client-generated key. A retry with the same key for the same
 	// restaurant returns the original order instead of creating a new one.
 	IdempotencyKey string `protobuf:"bytes,12,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	// Loyalty (optional). The caller has already reserved the points in
+	// kfc-loyalty; discount must not exceed the subtotal.
+	MemberId       string `protobuf:"bytes,13,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	Discount       int64  `protobuf:"varint,14,opt,name=discount,proto3" json:"discount,omitempty"` // kopecks
+	PointsRedeemed int32  `protobuf:"varint,15,opt,name=points_redeemed,json=pointsRedeemed,proto3" json:"points_redeemed,omitempty"`
+	LoyaltyHoldId  string `protobuf:"bytes,16,opt,name=loyalty_hold_id,json=loyaltyHoldId,proto3" json:"loyalty_hold_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -583,6 +622,34 @@ func (x *CreateOrderRequest) GetIdempotencyKey() string {
 	return ""
 }
 
+func (x *CreateOrderRequest) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *CreateOrderRequest) GetDiscount() int64 {
+	if x != nil {
+		return x.Discount
+	}
+	return 0
+}
+
+func (x *CreateOrderRequest) GetPointsRedeemed() int32 {
+	if x != nil {
+		return x.PointsRedeemed
+	}
+	return 0
+}
+
+func (x *CreateOrderRequest) GetLoyaltyHoldId() string {
+	if x != nil {
+		return x.LoyaltyHoldId
+	}
+	return ""
+}
+
 type GetOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -690,7 +757,8 @@ type ListOrdersRequest struct {
 	To            int64    `protobuf:"varint,5,opt,name=to,proto3" json:"to,omitempty"`     // unix millis, exclusive; 0 = unbounded
 	Limit         int32    `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32    `protobuf:"varint,7,opt,name=offset,proto3" json:"offset,omitempty"`
-	Number        int32    `protobuf:"varint,8,opt,name=number,proto3" json:"number,omitempty"` // 0 = any
+	Number        int32    `protobuf:"varint,8,opt,name=number,proto3" json:"number,omitempty"`                    // 0 = any
+	MemberId      string   `protobuf:"bytes,9,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"` // empty = any
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -779,6 +847,13 @@ func (x *ListOrdersRequest) GetNumber() int32 {
 		return x.Number
 	}
 	return 0
+}
+
+func (x *ListOrdersRequest) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
 }
 
 type ListOrdersResponse struct {
@@ -1334,7 +1409,7 @@ const file_proto_order_v1_order_proto_rawDesc = "" +
 	"\n" +
 	"unit_price\x18\b \x01(\x03R\tunitPrice\x12\x1d\n" +
 	"\n" +
-	"line_total\x18\t \x01(\x03R\tlineTotal\"\xf9\x05\n" +
+	"line_total\x18\t \x01(\x03R\tlineTotal\"\x83\a\n" +
 	"\x05Order\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rrestaurant_id\x18\x02 \x01(\tR\frestaurantId\x12\x16\n" +
@@ -1363,7 +1438,11 @@ const file_proto_order_v1_order_proto_rawDesc = "" +
 	"\fpreparing_at\x18\x16 \x01(\x03R\vpreparingAt\x12\x19\n" +
 	"\bready_at\x18\x17 \x01(\x03R\areadyAt\x12!\n" +
 	"\fcompleted_at\x18\x18 \x01(\x03R\vcompletedAt\x12!\n" +
-	"\fcancelled_at\x18\x19 \x01(\x03R\vcancelledAt\"\xe6\x01\n" +
+	"\fcancelled_at\x18\x19 \x01(\x03R\vcancelledAt\x12\x1b\n" +
+	"\tmember_id\x18\x1a \x01(\tR\bmemberId\x12\x1a\n" +
+	"\bdiscount\x18\x1b \x01(\x03R\bdiscount\x12'\n" +
+	"\x0fpoints_redeemed\x18\x1c \x01(\x05R\x0epointsRedeemed\x12&\n" +
+	"\x0floyalty_hold_id\x18\x1d \x01(\tR\rloyaltyHoldId\"\xe6\x01\n" +
 	"\x0fCreateOrderLine\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12!\n" +
 	"\fproduct_code\x18\x02 \x01(\tR\vproductCode\x12\x12\n" +
@@ -1372,7 +1451,7 @@ const file_proto_order_v1_order_proto_rawDesc = "" +
 	"\x0evariation_name\x18\x05 \x01(\tR\rvariationName\x12\x1a\n" +
 	"\bquantity\x18\x06 \x01(\x05R\bquantity\x12\x1d\n" +
 	"\n" +
-	"unit_price\x18\a \x01(\x03R\tunitPrice\"\xb7\x03\n" +
+	"unit_price\x18\a \x01(\x03R\tunitPrice\"\xc1\x04\n" +
 	"\x12CreateOrderRequest\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1d\n" +
@@ -1387,12 +1466,16 @@ const file_proto_order_v1_order_proto_rawDesc = "" +
 	"\bcurrency\x18\n" +
 	" \x01(\tR\bcurrency\x123\n" +
 	"\x05lines\x18\v \x03(\v2\x1d.kfc.order.v1.CreateOrderLineR\x05lines\x12'\n" +
-	"\x0fidempotency_key\x18\f \x01(\tR\x0eidempotencyKey\"!\n" +
+	"\x0fidempotency_key\x18\f \x01(\tR\x0eidempotencyKey\x12\x1b\n" +
+	"\tmember_id\x18\r \x01(\tR\bmemberId\x12\x1a\n" +
+	"\bdiscount\x18\x0e \x01(\x03R\bdiscount\x12'\n" +
+	"\x0fpoints_redeemed\x18\x0f \x01(\x05R\x0epointsRedeemed\x12&\n" +
+	"\x0floyalty_hold_id\x18\x10 \x01(\tR\rloyaltyHoldId\"!\n" +
 	"\x0fGetOrderRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"Z\n" +
 	"\x17ListActiveOrdersRequest\x12#\n" +
 	"\rrestaurant_id\x18\x01 \x01(\tR\frestaurantId\x12\x1a\n" +
-	"\bstatuses\x18\x02 \x03(\tR\bstatuses\"\xd6\x01\n" +
+	"\bstatuses\x18\x02 \x03(\tR\bstatuses\"\xf3\x01\n" +
 	"\x11ListOrdersRequest\x12%\n" +
 	"\x0erestaurant_ids\x18\x01 \x03(\tR\rrestaurantIds\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x18\n" +
@@ -1401,7 +1484,8 @@ const file_proto_order_v1_order_proto_rawDesc = "" +
 	"\x02to\x18\x05 \x01(\x03R\x02to\x12\x14\n" +
 	"\x05limit\x18\x06 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\a \x01(\x05R\x06offset\x12\x16\n" +
-	"\x06number\x18\b \x01(\x05R\x06number\"W\n" +
+	"\x06number\x18\b \x01(\x05R\x06number\x12\x1b\n" +
+	"\tmember_id\x18\t \x01(\tR\bmemberId\"W\n" +
 	"\x12ListOrdersResponse\x12+\n" +
 	"\x06orders\x18\x01 \x03(\v2\x13.kfc.order.v1.OrderR\x06orders\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"p\n" +

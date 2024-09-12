@@ -33,7 +33,20 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *orderv1.CreateOrderR
 		return nil, mapErrorToGRPC(err)
 	}
 
+	memberID, err := optionalUUID(req.GetMemberId(), "member_id")
+	if err != nil {
+		return nil, mapErrorToGRPC(err)
+	}
+	holdID, err := optionalUUID(req.GetLoyaltyHoldId(), "loyalty_hold_id")
+	if err != nil {
+		return nil, mapErrorToGRPC(err)
+	}
+
 	in := &domain.CreateOrderInput{
+		MemberID:       memberID,
+		Discount:       req.GetDiscount(),
+		PointsRedeemed: int(req.GetPointsRedeemed()),
+		LoyaltyHoldID:  holdID,
 		RestaurantID:   restaurantID,
 		Channel:        domain.Channel(req.GetChannel()),
 		OrderType:      domain.OrderType(req.GetOrderType()),
@@ -109,7 +122,13 @@ func (s *OrderServer) ListOrders(ctx context.Context, req *orderv1.ListOrdersReq
 		return nil, mapErrorToGRPC(err)
 	}
 
+	memberID, err := optionalUUID(req.GetMemberId(), "member_id")
+	if err != nil {
+		return nil, mapErrorToGRPC(err)
+	}
+
 	orders, total, err := s.svc.List(ctx, domain.OrderFilter{
+		MemberID:      memberID,
 		RestaurantIDs: restaurantIDs,
 		Status:        domain.Status(req.GetStatus()),
 		Channel:       domain.Channel(req.GetChannel()),

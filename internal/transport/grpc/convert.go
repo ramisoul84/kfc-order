@@ -38,6 +38,14 @@ func toProtoOrder(o *domain.Order) *orderv1.Order {
 	if o.DeviceID != nil {
 		p.DeviceId = o.DeviceID.String()
 	}
+	if o.MemberID != nil {
+		p.MemberId = o.MemberID.String()
+	}
+	if o.LoyaltyHoldID != nil {
+		p.LoyaltyHoldId = o.LoyaltyHoldID.String()
+	}
+	p.Discount = o.Discount
+	p.PointsRedeemed = int32(o.PointsRedeemed)
 	for _, l := range o.Lines {
 		pl := &orderv1.OrderLine{
 			Id:            l.ID.String(),

@@ -36,6 +36,11 @@ type OrderView struct {
 	ReadyAt       *time.Time `json:"ready_at,omitempty"`
 	CompletedAt   *time.Time `json:"completed_at,omitempty"`
 	CancelledAt   *time.Time `json:"cancelled_at,omitempty"`
+
+	MemberID       string  `json:"member_id,omitempty"`
+	Discount       float64 `json:"discount"`
+	PointsRedeemed int     `json:"points_redeemed,omitempty"`
+	LoyaltyHoldID  string  `json:"loyalty_hold_id,omitempty"`
 }
 
 type LineView struct {
@@ -80,6 +85,14 @@ func (o *Order) ToView() *OrderView {
 	if o.DeviceID != nil {
 		v.DeviceID = o.DeviceID.String()
 	}
+	if o.MemberID != nil {
+		v.MemberID = o.MemberID.String()
+	}
+	if o.LoyaltyHoldID != nil {
+		v.LoyaltyHoldID = o.LoyaltyHoldID.String()
+	}
+	v.Discount = Rubles(o.Discount)
+	v.PointsRedeemed = o.PointsRedeemed
 	for _, l := range o.Lines {
 		lv := LineView{
 			ID:            l.ID,

@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/ramisoul84/kfc-order/internal/config"
-	"github.com/ramisoul84/kfc-order/internal/events"
 	"github.com/ramisoul84/kfc-order/internal/repository"
 	"github.com/ramisoul84/kfc-order/internal/service"
 	grpcTransport "github.com/ramisoul84/kfc-order/internal/transport/grpc"
@@ -16,6 +15,7 @@ import (
 	"github.com/ramisoul84/kfc-order/pkg/kafka"
 	"github.com/ramisoul84/kfc-order/pkg/logger"
 	"github.com/ramisoul84/kfc-order/pkg/migrate"
+	"github.com/ramisoul84/kfc-order/pkg/outbox"
 )
 
 // App wires together all application components.
@@ -26,6 +26,7 @@ type App struct {
 	grpcServer    *grpcTransport.Transport
 	healthServer  *httpTransport.HealthServer
 	kafkaProducer *kafka.Producer
+	relay         *outbox.Relay
 }
 
 // New creates and wires the application.
@@ -61,23 +62,26 @@ func New(cfg *config.Config) (*App, error) {
 		log.Info("migrations up to date", "applied", applied)
 	}
 
-	// Kafka
+	// Kafka via the transactional outbox: order events are written with
+	// the order change and relayed from there.
 	var kafkaProducer *kafka.Producer
-	var publisher *events.Publisher
+	var relay *outbox.Relay
+	notify := func() {}
 	if len(cfg.Kafka.Brokers) > 0 {
 		kafkaProducer = kafka.NewProducer(cfg.Kafka.Brokers, log)
-		publisher = events.NewPublisher(kafkaProducer, cfg.Kafka.OrdersTopic, log)
-		log.Info("kafka producer initialized",
+		relay = outbox.NewRelay(db.DB, kafkaProducer, outboxLockID, log)
+		notify = relay.Notify
+		log.Info("outbox relay initialized",
 			"brokers", cfg.Kafka.Brokers,
 			"topic", cfg.Kafka.OrdersTopic,
 		)
 	} else {
-		log.Warn("kafka disabled; screens will not receive live order updates")
+		log.Warn("kafka disabled; order events accumulate in the outbox until it is enabled")
 	}
 
 	// Layers
-	orderRepo := repository.NewOrderRepository(db.DB)
-	orderService := service.NewOrderService(orderRepo, publisher, cfg.Location(), log)
+	orderRepo := repository.NewOrderRepository(db.DB, cfg.Kafka.OrdersTopic, notify)
+	orderService := service.NewOrderService(orderRepo, cfg.Location(), log)
 	orderServer := grpcTransport.NewOrderServer(orderService, log)
 
 	return &App{
@@ -87,8 +91,12 @@ func New(cfg *config.Config) (*App, error) {
 		grpcServer:    grpcTransport.NewTransport(cfg, log, orderServer),
 		healthServer:  httpTransport.NewHealthServer(cfg.HTTP.Port, db.DB),
 		kafkaProducer: kafkaProducer,
+		relay:         relay,
 	}, nil
 }
+
+// outboxLockID elects one relay among this service's replicas.
+const outboxLockID = 7_310_455_201
 
 // Start serves gRPC and the health endpoint until ctx is cancelled or a
 // transport fails.
@@ -106,6 +114,10 @@ func (a *App) Start(ctx context.Context) error {
 			errCh <- fmt.Errorf("http: %w", err)
 		}
 	}()
+
+	if a.relay != nil {
+		go a.relay.Run(ctx)
+	}
 
 	select {
 	case <-ctx.Done():

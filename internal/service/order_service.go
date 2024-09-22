@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ramisoul84/kfc-order/internal/domain"
-	"github.com/ramisoul84/kfc-order/internal/events"
 	"github.com/ramisoul84/kfc-order/internal/repository"
 	"github.com/ramisoul84/kfc-order/pkg/logger"
 )
@@ -25,19 +24,17 @@ type OrderService interface {
 }
 
 type orderService struct {
-	repo      repository.OrderRepository
-	publisher *events.Publisher
-	loc       *time.Location
-	logger    *logger.Logger
+	repo   repository.OrderRepository
+	loc    *time.Location
+	logger *logger.Logger
 }
 
 func NewOrderService(
 	repo repository.OrderRepository,
-	publisher *events.Publisher,
 	loc *time.Location,
 	log *logger.Logger,
 ) OrderService {
-	return &orderService{repo: repo, publisher: publisher, loc: loc, logger: log}
+	return &orderService{repo: repo, loc: loc, logger: log}
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -131,7 +128,6 @@ func (s *orderService) Create(ctx context.Context, in *domain.CreateOrderInput) 
 		"lines", len(order.Lines),
 	)
 
-	s.publisher.Publish(ctx, events.TypeOrderCreated, order)
 	return order, nil
 }
 
@@ -281,7 +277,6 @@ func (s *orderService) UpdateStatus(
 		"actor", actor,
 	)
 
-	s.publisher.Publish(ctx, events.TypeOrderStatusChanged, updated)
 	return updated, nil
 }
 

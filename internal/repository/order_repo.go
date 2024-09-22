@@ -13,6 +13,8 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/ramisoul84/kfc-order/internal/domain"
+	"github.com/ramisoul84/kfc-order/internal/events"
+	"github.com/ramisoul84/kfc-order/pkg/outbox"
 )
 
 // OrderRepository persists orders and their lines.
@@ -36,11 +38,30 @@ type OrderRepository interface {
 }
 
 type orderRepo struct {
-	db *sqlx.DB
+	db          *sqlx.DB
+	eventsTopic string
+	// committed is called after a transaction that wrote outbox events
+	// commits, to wake the relay. May be nil.
+	committed func()
 }
 
-func NewOrderRepository(db *sqlx.DB) OrderRepository {
-	return &orderRepo{db: db}
+// NewOrderRepository builds the repository. Every mutation also writes an
+// order event to the outbox for eventsTopic, in the same transaction.
+func NewOrderRepository(db *sqlx.DB, eventsTopic string, committed func()) OrderRepository {
+	if committed == nil {
+		committed = func() {}
+	}
+	return &orderRepo{db: db, eventsTopic: eventsTopic, committed: committed}
+}
+
+// emit queues an order event inside tx. Keyed by restaurant so all events
+// for one restaurant keep their order on a single partition.
+func (r *orderRepo) emit(ctx context.Context, tx *sqlx.Tx, eventType string, o *domain.Order) error {
+	evt := events.New(eventType, o)
+	if err := outbox.Insert(ctx, tx, r.eventsTopic, evt.RestaurantID, evt); err != nil {
+		return domain.NewInternalError(err)
+	}
+	return nil
 }
 
 const orderColumns = `
@@ -114,9 +135,13 @@ func (r *orderRepo) Create(ctx context.Context, o *domain.Order) error {
 		}
 	}
 
+	if err := r.emit(ctx, tx, events.TypeOrderCreated, o); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return domain.NewInternalError(fmt.Errorf("commit: %w", err))
 	}
+	r.committed()
 	return nil
 }
 
@@ -239,6 +264,10 @@ func buildWhere(f domain.OrderFilter) (string, []any) {
 
 // attachLines loads lines for all orders in a single query.
 func (r *orderRepo) attachLines(ctx context.Context, orders []*domain.Order) error {
+	return attachLines(ctx, r.db, orders)
+}
+
+func attachLines(ctx context.Context, q sqlx.QueryerContext, orders []*domain.Order) error {
 	if len(orders) == 0 {
 		return nil
 	}
@@ -251,7 +280,7 @@ func (r *orderRepo) attachLines(ctx context.Context, orders []*domain.Order) err
 	}
 
 	var lines []domain.OrderLine
-	err := r.db.SelectContext(ctx, &lines, `
+	err := sqlx.SelectContext(ctx, q, &lines, `
 		SELECT id, order_id, position, item_id, product_code, name,
 		       variation_id, variation_name, quantity, unit_price, line_total
 		FROM order_lines
@@ -303,18 +332,35 @@ func (r *orderRepo) UpdateStatus(
 		args = append(args, reason)
 	}
 
-	res, err := r.db.ExecContext(ctx, fmt.Sprintf(`
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, domain.NewInternalError(fmt.Errorf("begin: %w", err))
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	var o domain.Order
+	err = tx.GetContext(ctx, &o, fmt.Sprintf(`
 		UPDATE orders
 		SET status = $3, updated_at = NOW(), %s
-		WHERE id = $1 AND status = $2`, set), args...)
+		WHERE id = $1 AND status = $2
+		RETURNING `+orderColumns, set), args...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.NewConflictError("order status changed by someone else; refresh and try again")
+	}
 	if err != nil {
 		return nil, domain.NewInternalError(fmt.Errorf("update order status: %w", err))
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return nil, domain.NewConflictError("order status changed by someone else; refresh and try again")
+	if err := attachLines(ctx, tx, []*domain.Order{&o}); err != nil {
+		return nil, err
 	}
-	return r.GetByID(ctx, id)
+	if err := r.emit(ctx, tx, events.TypeOrderStatusChanged, &o); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, domain.NewInternalError(fmt.Errorf("commit: %w", err))
+	}
+	r.committed()
+	return &o, nil
 }
 
 // ═══════════════════════════════════════════════════════════════════

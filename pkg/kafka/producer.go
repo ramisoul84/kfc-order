@@ -75,6 +75,12 @@ func (p *Producer) Publish(ctx context.Context, topic, key string, payload any) 
 	return nil
 }
 
+// WriteMessages sends pre-encoded messages in one batch, in order. Used
+// by the outbox relay.
+func (p *Producer) WriteMessages(ctx context.Context, msgs ...kafka.Message) error {
+	return p.writer.WriteMessages(ctx, msgs...)
+}
+
 // Close flushes pending writes and closes the writer.
 // Safe to call more than once.
 func (p *Producer) Close() error {

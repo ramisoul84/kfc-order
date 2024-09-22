@@ -14,5 +14,5 @@ USER app
 COPY --from=build /out/order /usr/local/bin/order
 ENV APP_ENV=staging
 EXPOSE 8003 9103
-HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://localhost:8003/health || exit 1
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1:8003/health || exit 1
 ENTRYPOINT ["/usr/local/bin/order"]

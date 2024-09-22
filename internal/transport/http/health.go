@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/ramisoul84/kfc-order/pkg/outbox"
 )
 
 type HealthServer struct {
@@ -22,16 +24,17 @@ func NewHealthServer(port string, db *sqlx.DB) *HealthServer {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
-		status, code := "ok", http.StatusOK
+		body := map[string]any{"status": "ok", "time": time.Now().Format(time.RFC3339)}
+		code := http.StatusOK
 		if err := db.PingContext(ctx); err != nil {
-			status, code = "db_unavailable", http.StatusServiceUnavailable
+			body["status"], code = "db_unavailable", http.StatusServiceUnavailable
+		} else if n, err := outbox.Pending(ctx, db); err == nil {
+			// A growing backlog means events aren't reaching Kafka.
+			body["outbox_pending"] = n
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"status": status,
-			"time":   time.Now().Format(time.RFC3339),
-		})
+		_ = json.NewEncoder(w).Encode(body)
 	})
 
 	return &HealthServer{srv: &http.Server{

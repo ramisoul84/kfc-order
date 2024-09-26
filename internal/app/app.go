@@ -14,6 +14,7 @@ import (
 	"github.com/ramisoul84/kfc-order/pkg/database"
 	"github.com/ramisoul84/kfc-order/pkg/kafka"
 	"github.com/ramisoul84/kfc-order/pkg/logger"
+	"github.com/ramisoul84/kfc-order/pkg/metrics"
 	"github.com/ramisoul84/kfc-order/pkg/migrate"
 	"github.com/ramisoul84/kfc-order/pkg/outbox"
 )
@@ -78,6 +79,8 @@ func New(cfg *config.Config) (*App, error) {
 	} else {
 		log.Warn("kafka disabled; order events accumulate in the outbox until it is enabled")
 	}
+
+	outbox.RegisterMetrics(metrics.Registry, db.DB)
 
 	// Layers
 	orderRepo := repository.NewOrderRepository(db.DB, cfg.Kafka.OrdersTopic, notify)

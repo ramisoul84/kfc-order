@@ -23,7 +23,7 @@ type Transport struct {
 
 // NewTransport creates a gRPC server and registers all gRPC services.
 func NewTransport(cfg *config.Config, log *logger.Logger, orderServer *OrderServer) *Transport {
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(serverOptions(log)...)
 
 	orderv1.RegisterOrderServiceServer(srv, orderServer)
 

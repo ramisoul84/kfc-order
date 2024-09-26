@@ -30,6 +30,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 
 	"github.com/ramisoul84/kfc-order/pkg/logger"
@@ -217,4 +218,22 @@ func Pending(ctx context.Context, db *sqlx.DB) (int, error) {
 	var n int
 	err := db.GetContext(ctx, &n, `SELECT COUNT(*) FROM outbox WHERE published_at IS NULL`)
 	return n, err
+}
+
+// RegisterMetrics exposes the number of unpublished events as the
+// outbox_pending gauge. A backlog that keeps growing means events are not
+// reaching Kafka.
+func RegisterMetrics(reg prometheus.Registerer, db *sqlx.DB) {
+	reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "outbox_pending",
+		Help: "Events written to the outbox but not yet published to Kafka.",
+	}, func() float64 {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		n, err := Pending(ctx, db)
+		if err != nil {
+			return -1
+		}
+		return float64(n)
+	}))
 }

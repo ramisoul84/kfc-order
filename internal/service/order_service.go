@@ -119,6 +119,7 @@ func (s *orderService) Create(ctx context.Context, in *domain.CreateOrderInput) 
 		return nil, err
 	}
 
+	ordersCreated.WithLabelValues(string(order.Channel)).Inc()
 	s.logger.Info("order created",
 		"order_id", order.ID,
 		"restaurant_id", order.RestaurantID,
@@ -268,6 +269,7 @@ func (s *orderService) UpdateStatus(
 		return nil, err
 	}
 
+	statusChanges.WithLabelValues(string(to)).Inc()
 	s.logger.Info("order status changed",
 		"order_id", id,
 		"restaurant_id", updated.RestaurantID,

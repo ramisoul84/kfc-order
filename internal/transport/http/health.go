@@ -11,6 +11,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
+	"github.com/ramisoul84/kfc-order/pkg/metrics"
+
 	"github.com/ramisoul84/kfc-order/pkg/outbox"
 )
 
@@ -20,7 +22,10 @@ type HealthServer struct {
 
 func NewHealthServer(port string, db *sqlx.DB) *HealthServer {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	// /health and /ready both check the database: without it this
+	// service can do nothing useful. /metrics is the Prometheus target.
+	mux.Handle("GET /metrics", metrics.Handler())
+	health := func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
@@ -35,7 +40,9 @@ func NewHealthServer(port string, db *sqlx.DB) *HealthServer {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
 		_ = json.NewEncoder(w).Encode(body)
-	})
+	}
+	mux.HandleFunc("GET /health", health)
+	mux.HandleFunc("GET /ready", health)
 
 	return &HealthServer{srv: &http.Server{
 		Addr:              ":" + port,
